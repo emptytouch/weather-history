@@ -6,11 +6,20 @@ const BASE = "https://mirror-earth.com";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 function reqHeaders(json) {
-  return {
+  const h = {
     "User-Agent": UA,
-    "Accept": json ? "application/json, text/plain, */*" : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept": json ? "application/json, text/plain, */*" : "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
   };
+  // 非 JSON 的文档请求：补齐浏览器导航类请求头，降低被 WAF 当机器人/挑战页处理的概率
+  if (!json) {
+    h["sec-fetch-site"] = "none";
+    h["sec-fetch-mode"] = "navigate";
+    h["sec-fetch-dest"] = "document";
+    h["sec-fetch-user"] = "?1";
+    h["upgrade-insecure-requests"] = "1";
+  }
+  return h;
 }
 
 function causeOf(err) {
@@ -115,7 +124,15 @@ async function fetchMonth(id, ym) {
   if (!res.ok) throw new Error("上游返回 HTTP " + res.status);
   const html = await res.text();
   const parsed = parseMonthHtml(html);
-  if (!parsed) throw new Error("页面解析失败（上游页面结构可能已变化）");
+  if (!parsed) {
+    // 诊断信息：帮助判断返回的是真实页面还是 WAF 挑战页 / 结构变化
+    const head = html.slice(0, 600).replace(/\s+/g, " ");
+    const diag =
+      `htmlLen=${html.length}, type=${res.headers.get("content-type")}, ` +
+      `hasT2m=${html.includes("t2m_max_num")}, hasIso=${html.includes("iso_dates")}, ` +
+      `isChallenge=${/captcha|verify|challenge|uuwaf|access denied|just a moment|请输入|验证/i.test(html)}`;
+    throw new Error(`页面解析失败（上游页面结构可能已变化） | ${diag} | 开头: ${head}`);
+  }
   return parsed;
 }
 

@@ -2,8 +2,34 @@
 // 源站 /wea_history/<id>/<YYYY-MM> 页面把整月每日天气以「并行数组」形式内嵌在 RSC 流中
 // （字段：iso_dates / t2m_max_num / t2m_min_num / precipitation / humidity_num / wind_max_num / sunshine_num）。
 // 该页面不带 CORS 头，浏览器无法直连，故在服务端抓取并解析为干净 JSON 返回。
+import { ProxyAgent, fetch as undiciFetch } from "undici";
+
 const BASE = "https://mirror-earth.com";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+// 源站 uuWAF 按「数据中心 IP」拦截：Netlify 云函数（AWS IP）请求历史 HTML 会被返回
+// 「UUSEC WAF Challenge」挑战页（约 783 字节），而本地家庭宽带 / 住宅代理 IP 不受影响。
+// 部署到 Netlify 时，配置环境变量 PROXY_URL 让函数出口走一个「未被拦截的 IP」即可绕过。
+// 格式示例：http://user:pass@host:port 或 http://host:port
+// 本地 netlify dev（你的机器 IP 不被拦）则无需配置，直连即可。
+const PROXY_URL = (process.env.PROXY_URL || "").trim();
+let proxyAgent = null;
+if (PROXY_URL) {
+  try {
+    proxyAgent = new ProxyAgent(PROXY_URL);
+  } catch (e) {
+    proxyAgent = null;
+    console.error("[history] PROXY_URL 解析失败，已回退直连：", e.message);
+  }
+}
+
+// 统一出口：有代理走代理，无代理直连（本地 dev 默认直连即可）
+async function serverFetch(url, opts = {}) {
+  if (proxyAgent) {
+    return undiciFetch(url, { ...opts, dispatcher: proxyAgent });
+  }
+  return fetch(url, opts);
+}
 
 function reqHeaders(json) {
   const h = {
@@ -120,17 +146,24 @@ function monthsBetween(start, end) {
 // 抓取单月并解析；任何失败都向上抛出（不再静默吞掉），便于定位
 async function fetchMonth(id, ym) {
   const url = `${BASE}/wea_history/${encodeURIComponent(id)}/${ym}`;
-  const res = await fetch(url, { headers: reqHeaders(false), redirect: "follow" });
+  const res = await serverFetch(url, { headers: reqHeaders(false), redirect: "follow" });
   if (!res.ok) throw new Error("上游返回 HTTP " + res.status);
   const html = await res.text();
   const parsed = parseMonthHtml(html);
   if (!parsed) {
     // 诊断信息：帮助判断返回的是真实页面还是 WAF 挑战页 / 结构变化
     const head = html.slice(0, 600).replace(/\s+/g, " ");
+    const isChallenge = /captcha|verify|challenge|uuwaf|access denied|just a moment|请输入|验证/i.test(html);
     const diag =
       `htmlLen=${html.length}, type=${res.headers.get("content-type")}, ` +
       `hasT2m=${html.includes("t2m_max_num")}, hasIso=${html.includes("iso_dates")}, ` +
-      `isChallenge=${/captcha|verify|challenge|uuwaf|access denied|just a moment|请输入|验证/i.test(html)}`;
+      `isChallenge=${isChallenge}, proxy=${!!proxyAgent}`;
+    // 命中 WAF 挑战页且未走代理：明确提示需要配置 PROXY_URL
+    if (isChallenge && !proxyAgent) {
+      throw new Error(
+        `被源站 WAF 拦截（返回挑战页，疑似数据中心 IP 被拦）。部署到 Netlify 时请配置环境变量 PROXY_URL 指向一个「住宅/ISP 代理」出口 | ${diag} | 开头: ${head}`
+      );
+    }
     throw new Error(`页面解析失败（上游页面结构可能已变化） | ${diag} | 开头: ${head}`);
   }
   return parsed;
@@ -181,7 +214,10 @@ export const handler = async (event) => {
   }
 
   if (records.length === 0 && firstError) {
-    return json(502, { error: "拉取历史数据失败：" + (firstError.message || firstError) + causeOf(firstError) });
+    return json(502, {
+      error: "拉取历史数据失败：" + (firstError.message || firstError) + causeOf(firstError),
+      proxy: !!proxyAgent,
+    });
   }
 
   // 按精确日期区间过滤（避免月度边界外溢）
@@ -198,6 +234,7 @@ export const handler = async (event) => {
     months,
     monthsWithData: okMonths,
     count: records.length,
+    proxy: !!proxyAgent,
     records,
   });
 };

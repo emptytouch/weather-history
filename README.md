@@ -70,6 +70,27 @@ netlify deploy --prod --dir=.
 > ⚠️ 直接「拖拽文件夹」到 Netlify 只能发布静态文件，**不会包含 Functions**，
 > 网站会因 `/api/*` 无法解析而无法查询。请使用上述 Git 连接或 CLI 方式。
 
+## ⚠️ 部署到 Netlify 云端必须配置代理（重要）
+
+源站 `mirror-earth.com` 使用 **uuWAF**，会按「数据中心 IP」拦截请求：
+
+- **本地 `netlify dev`（你的家庭宽带 / 住宅 IP）**：不受影响，函数直连即可正常拉取历史页。
+- **部署到 Netlify 云端**：函数跑在 AWS 数据中心 IP 上，历史 HTML 请求会被返回
+  「UUSEC WAF Challenge」挑战页（约 783 字节），导致 `history` 接口报「被源站 WAF 拦截」。
+
+解决：在 Netlify 后台给站点配置一个环境变量 **`PROXY_URL`**，让函数出口走一个
+**未被拦截的住宅 / ISP 代理**（数据中心代理通常仍会被拦，需用住宅/ISP 类型）：
+
+1. Netlify 后台 → 站点 → **Site configuration → Environment variables**。
+2. 新增变量 `PROXY_URL`，值形如 `http://user:pass@host:port` 或 `http://host:port`。
+3. 重新部署（Deploy → Trigger deploy）。
+
+`history` 函数响应里会带回 `proxy: true/false`，可据此确认代理是否生效。
+未配置 `PROXY_URL` 时函数自动直连（用于本地开发）。
+
+> 说明：地区搜索接口 `/api/region/search` 带 CORS 且未被 WAF 拦，部署后无需代理也能用；
+> 仅「历史天气」HTML 页路由受影响。
+
 ## 使用说明
 
 1. 在「选择地区」输入**中文**地名（如 `犍为`、`北京`、`乐山`），点击搜索。

@@ -1,0 +1,11 @@
+{
+  "name": "weather-history",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "历史天气查询系统：拉取镜像地球历史天气，支持时间段筛选与 Excel 导出",
+  "scripts": {
+    "dev": "netlify dev",
+    "test": "node test/functions-test.mjs"
+  }
+}

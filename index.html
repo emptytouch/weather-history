@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>历史天气查询 · 镜像地球数据</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <h1>历史天气查询</h1>
+      <p class="subtitle">输入地区名称，拉取历史天气数据，支持时间段筛选与 Excel 导出</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 1. 地区搜索 -->
+    <section class="card">
+      <h2 class="card-title">① 选择地区</h2>
+      <div class="search-row">
+        <input id="regionInput" type="text" placeholder="输入城市/地区名，如：犍为、北京、乐山" autocomplete="off" />
+        <button id="searchBtn" class="btn btn-primary">搜索</button>
+      </div>
+      <p class="hint">提示：搜索接口按中文匹配，拼音（如 qianwei）无效；可输入省/市/区/县名。</p>
+      <div id="regionResults" class="region-results"></div>
+    </section>
+
+    <!-- 2. 时间段 -->
+    <section class="card">
+      <h2 class="card-title">② 选择时间段</h2>
+      <div class="preset-row" id="presetRow">
+        <button class="btn btn-preset" data-preset="7">最近 7 天</button>
+        <button class="btn btn-preset" data-preset="15">最近 15 天</button>
+        <button class="btn btn-preset" data-preset="30">最近 30 天</button>
+        <button class="btn btn-preset" data-preset="thisMonth">本月</button>
+        <button class="btn btn-preset" data-preset="lastMonth">上月</button>
+      </div>
+      <div class="date-row">
+        <label>开始日期 <input id="startDate" type="date" /></label>
+        <label>结束日期 <input id="endDate" type="date" /></label>
+        <button id="queryBtn" class="btn btn-primary" disabled>查询</button>
+      </div>
+    </section>
+
+    <!-- 3. 结果 -->
+    <section class="card" id="resultCard" style="display:none">
+      <div class="result-head">
+        <h2 class="card-title" id="resultTitle">查询结果</h2>
+        <button id="exportBtn" class="btn btn-export" disabled>导出 Excel</button>
+      </div>
+      <div id="statusBar" class="status-bar"></div>
+      <div id="summary" class="summary"></div>
+      <div id="chartWrap" class="chart-wrap"></div>
+      <div class="table-wrap">
+        <table id="dataTable">
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>最高温 (°C)</th>
+              <th>最低温 (°C)</th>
+              <th>降雨量 (mm)</th>
+              <th>湿度 (%)</th>
+              <th>最大风速 (m/s)</th>
+              <th>日照时长 (h)</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer container">
+    <p>数据来源：<a href="https://mirror-earth.com/wea_history" target="_blank" rel="noopener">镜像地球 mirror-earth.com</a> · 仅供学习与研究使用</p>
+  </footer>
+
+  <script src="./vendor/xlsx.full.min.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

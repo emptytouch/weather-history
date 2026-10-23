@@ -1,0 +1,19 @@
+[build]
+  # 站点根目录即发布目录（纯静态前端）
+  publish = "."
+  # 不执行任何构建命令；如需可在此加 command
+
+[functions]
+  # Netlify Functions 目录（服务端代理 + 解析，解决源站 CORS 问题）
+  directory = "netlify/functions"
+
+# 把干净的 /api/* 路径映射到函数
+[[redirects]]
+  from = "/api/search"
+  to = "/.netlify/functions/search"
+  status = 200
+
+[[redirects]]
+  from = "/api/history"
+  to = "/.netlify/functions/history"
+  status = 200

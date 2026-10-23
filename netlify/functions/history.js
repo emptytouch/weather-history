@@ -20,12 +20,14 @@ function causeOf(err) {
 }
 
 function json(statusCode, body, extraHeaders = {}) {
+  // 成功响应可缓存；错误响应禁止缓存（避免把 502 缓存住误导用户）
+  const cache = statusCode === 200 ? "public, max-age=1800" : "no-store";
   return {
     statusCode,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Access-Control-Allow-Origin": "*",
-      "Cache-Control": "public, max-age=1800",
+      "Cache-Control": cache,
       ...extraHeaders,
     },
     body: JSON.stringify(body),

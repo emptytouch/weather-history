@@ -3,7 +3,21 @@
 // （字段：iso_dates / t2m_max_num / t2m_min_num / precipitation / humidity_num / wind_max_num / sunshine_num）。
 // 该页面不带 CORS 头，浏览器无法直连，故在服务端抓取并解析为干净 JSON 返回。
 const BASE = "https://mirror-earth.com";
-const UA = "Mozilla/5.0";
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+function reqHeaders(json) {
+  return {
+    "User-Agent": UA,
+    "Accept": json ? "application/json, text/plain, */*" : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+  };
+}
+
+function causeOf(err) {
+  const c = err && err.cause;
+  if (!c) return "";
+  return " (" + (c.code || c.message || String(c)) + ")";
+}
 
 function json(statusCode, body, extraHeaders = {}) {
   return {
@@ -92,16 +106,15 @@ function monthsBetween(start, end) {
   return out;
 }
 
+// 抓取单月并解析；任何失败都向上抛出（不再静默吞掉），便于定位
 async function fetchMonth(id, ym) {
-  try {
-    const url = `${BASE}/wea_history/${encodeURIComponent(id)}/${ym}`;
-    const res = await fetch(url, { headers: { "User-Agent": UA } });
-    if (!res.ok) return null;
-    const html = await res.text();
-    return parseMonthHtml(html);
-  } catch (e) {
-    return null;
-  }
+  const url = `${BASE}/wea_history/${encodeURIComponent(id)}/${ym}`;
+  const res = await fetch(url, { headers: reqHeaders(false), redirect: "follow" });
+  if (!res.ok) throw new Error("上游返回 HTTP " + res.status);
+  const html = await res.text();
+  const parsed = parseMonthHtml(html);
+  if (!parsed) throw new Error("页面解析失败（上游页面结构可能已变化）");
+  return parsed;
 }
 
 export const handler = async (event) => {
@@ -126,17 +139,30 @@ export const handler = async (event) => {
   const end = (q.end || "").trim();
 
   const months = monthsBetween(start || undefined, end || undefined);
-  const parts = await Promise.all(months.map((ym) => fetchMonth(id, ym)));
 
   let records = [];
   let title = "";
   let okMonths = 0;
-  for (const p of parts) {
-    if (p && p.records && p.records.length) {
-      records = records.concat(p.records);
-      okMonths++;
-      if (!title && p.title) title = p.title;
+  let firstError = null;
+
+  try {
+    // allSettled：部分月份失败不影响其他月份；全部失败才报错
+    const settled = await Promise.allSettled(months.map((ym) => fetchMonth(id, ym)));
+    for (const s of settled) {
+      if (s.status === "fulfilled" && s.value && s.value.records.length) {
+        records = records.concat(s.value.records);
+        okMonths++;
+        if (!title && s.value.title) title = s.value.title;
+      } else if (s.status === "rejected" && !firstError) {
+        firstError = s.reason;
+      }
     }
+  } catch (err) {
+    firstError = err;
+  }
+
+  if (records.length === 0 && firstError) {
+    return json(502, { error: "拉取历史数据失败：" + (firstError.message || firstError) + causeOf(firstError) });
   }
 
   // 按精确日期区间过滤（避免月度边界外溢）

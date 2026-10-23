@@ -1,4 +1,6 @@
 [build]
+  # 项目位于仓库根目录（index.html / netlify/ / vendor/ 直接在下）
+  base = "."
   # 站点根目录即发布目录（纯静态前端）
   publish = "."
   # 不执行任何构建命令；如需可在此加 command

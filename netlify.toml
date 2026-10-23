@@ -10,7 +10,10 @@
 [functions]
   # Netlify Functions 目录（服务端代理 + 解析，解决源站 CORS 问题）
   directory = "netlify/functions"
-  # 历史抓取函数超时放宽（走代理时可能稍慢）
+
+# 历史抓取函数超时放宽（走代理时可能稍慢）
+[[functions]]
+  function = "history"
   timeout = 20
 
 # 把干净的 /api/* 路径映射到函数
